@@ -134,6 +134,6 @@ def format_analysis(result: dict[str, Any]) -> str:
     return (
         f"🎯 Совпадение: {result['match_percent']}%\n\n"
         f"✅ У вас есть:\n{matched}\n\n"
-        f"❌ Не хватает:\n{missing}\n\n"
+        f"❌ He хватает:\n{missing}\n\n"
         f"💡 Рекомендация:\n{result['recommendation']}"
     )

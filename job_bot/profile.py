@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from db import get_user_profile, upsert_user_profile
+from services.profile_registration_service import build_profile_document
 
 
 LEVELS = {
@@ -219,6 +220,19 @@ def _as_list(value: Any) -> list[str]:
 
 
 def profile_complete(data: dict[str, Any]) -> bool:
+    if data.get("full_name") or data.get("age") or data.get("education_level") or data.get("employment_status"):
+        required = [
+            "full_name",
+            "age",
+            "city",
+            "education_level",
+            "employment_status",
+            "desired_position",
+            "experience_level",
+            "skills",
+            "preferred_language",
+        ]
+        return all(bool(data.get(key)) for key in required)
     if any(key in data for key in ("field", "specialization", "skills")):
         return bool(
             data.get("field")
@@ -233,6 +247,23 @@ def profile_complete(data: dict[str, Any]) -> bool:
 
 
 def display_profile(profile: dict[str, Any]) -> str:
+    if profile.get("full_name"):
+        skills = ", ".join(_as_list(profile.get("skills", []))) if _as_list(profile.get("skills", [])) else "—"
+        salary = profile.get("expected_salary")
+        return (
+            "👤 Мой профиль\n\n"
+            f"📛 Имя: {profile.get('full_name')}\n"
+            f"🎂 Возраст: {profile.get('age')}\n"
+            f"📍 Город: {profile.get('city') or '—'}\n"
+            f"🎓 Образование: {profile.get('education_level') or '—'}\n"
+            f"💼 Занятость: {profile.get('employment_status') or '—'}\n"
+            f"🎯 Должность: {profile.get('desired_position') or '—'}\n"
+            f"📊 Опыт: {profile.get('experience_level') or '—'}\n"
+            f"🧠 Навыки: {skills}\n"
+            f"🌐 Язык: {profile.get('preferred_language') or '—'}\n"
+            f"💰 Ожидаемая зарплата: {salary if salary is not None else 'не указана'}"
+        )
+
     def labels(values: list[str], source: dict[str, str]) -> str:
         if not values:
             return "—"
@@ -273,6 +304,8 @@ def display_profile(profile: dict[str, Any]) -> str:
 
 
 def save_profile(user_id: int, data: dict[str, Any]) -> dict[str, Any] | None:
+    if any(key in data for key in ("full_name", "age", "city", "education_level", "employment_status", "desired_position")):
+        return upsert_user_profile(user_id, build_profile_document(data))
     profile = dict(data)
     profile["language"] = profile.get("language", profile.get("lang", "ru"))
     if profile.get("field") or profile.get("specialization") or profile.get("skills"):

@@ -50,6 +50,7 @@ from keyboards import (
     stats_keyboard,
     stats_materials_keyboard,
 )
+from handlers.registration import router as registration_router
 from learning import learning_skills, material_for, materials_for
 from parser import Vacancy, fetch_all_vacancies, fetch_channel_posts
 from profile import PROFILE_FIELDS, display_profile, load_profile, profile_complete, save_profile
@@ -59,9 +60,54 @@ from vacancy_filter import filter_posts_by_keywords, filter_vacancies
 
 
 router = Router()
+router.include_router(registration_router)
 
 CHANNEL_USERNAME_RE = re.compile(r"^(?:@|https://t\.me/)([A-Za-z0-9_]{5,32})/?$", re.IGNORECASE)
 RESULTS_PAGE_SIZE = 15
+
+
+@router.callback_query(F.data == "profile_logout")
+async def profile_logout_handler(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    lang = data.get("lang") or get_user_language(callback.from_user.id) or "ru"
+    set_user_profile_active(callback.from_user.id, False)
+    await state.clear()
+    await state.update_data(lang=lang)
+    await state.set_state(SearchStates.choosing_category)
+    await callback.answer()
+    await callback.message.edit_text(t("logout_confirmed", lang), reply_markup=login_keyboard(lang))
+
+
+@router.callback_query(F.data == "profile_login")
+async def profile_login_handler(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = (await state.get_data()).get("lang") or get_user_language(callback.from_user.id) or "ru"
+    profile = get_user_profile(callback.from_user.id)
+    await callback.answer()
+    if profile is None:
+        await callback.message.edit_text(t("need_profile_first", lang), reply_markup=login_keyboard(lang))
+        return
+    set_user_profile_active(callback.from_user.id, True)
+    updated = get_user_profile(callback.from_user.id) or profile
+    await callback.message.edit_text(
+        f"{t('login_success', lang)}\n\n{display_profile(updated)}",
+        reply_markup=profile_menu_keyboard(lang=lang),
+    )
+
+
+@router.callback_query(F.data == "profile_menu")
+async def profile_menu_handler(callback: CallbackQuery) -> None:
+    profile = load_profile(callback.from_user.id)
+    lang = get_user_language(callback.from_user.id) or "ru"
+    await callback.answer()
+    if profile is None or not profile_complete(profile):
+        existing = get_user_profile(callback.from_user.id)
+        has_real_profile = bool(existing) and any(existing.get(key) for key in ("field", "specialization", "skills", "preferred_roles", "experience_level", "full_name", "desired_position"))
+        if has_real_profile:
+            await callback.message.edit_text(t("login_required", lang), reply_markup=login_keyboard(lang))
+        else:
+            await callback.message.edit_text(t("no_active_profile", lang), reply_markup=profile_create_keyboard(lang))
+        return
+    await callback.message.edit_text(display_profile(profile), reply_markup=profile_menu_keyboard(lang=lang))
 
 
 def find_more_visible(page: int, total: int) -> bool:
@@ -216,194 +262,8 @@ async def new_search_handler(callback: CallbackQuery, state: FSMContext) -> None
     await callback.message.edit_text(categories_text(lang), reply_markup=categories_keyboard(lang))
 
 
-async def begin_profile_onboarding(callback: CallbackQuery, state: FSMContext, *, edit_mode: bool = False) -> None:
-    data = await state.get_data()
-    lang = data.get("lang", "ru")
-    await state.clear()
-    await state.update_data(
-        lang=lang,
-        edit_mode=edit_mode,
-        field=None,
-        specialization=None,
-        skills=[],
-        level=None,
-        work_format=None,
-        experience=None,
-        hours=None,
-        city=None,
-        preferred_roles=[],
-        work_formats=[],
-        locations=[],
-        languages=[],
-    )
-    if edit_mode:
-        existing = load_profile(callback.from_user.id) or {}
-        await state.update_data(**existing)
-    await state.set_state(SearchStates.profile_field)
-    await callback.message.edit_text(t("profile_field_prompt", lang), reply_markup=profile_field_keyboard(lang))
 
 
-async def finish_profile_field(callback: CallbackQuery, state: FSMContext) -> None:
-    data = await state.get_data()
-    if data.get("work_format") == "online":
-        data["city"] = "online"
-    profile = save_profile(callback.from_user.id, data)
-    await state.clear()
-    if profile is None:
-        await callback.answer(t("profile_save_failed", data.get("lang", "ru")), show_alert=True)
-        return
-    lang = data.get("lang", "ru")
-    await state.update_data(lang=lang)
-    await state.set_state(SearchStates.choosing_category)
-    await callback.answer()
-    await callback.message.edit_text(categories_text(lang), reply_markup=categories_keyboard(lang))
-
-
-@router.callback_query(F.data == "profile_logout")
-async def profile_logout_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    data = await state.get_data()
-    lang = data.get("lang") or get_user_language(callback.from_user.id) or "ru"
-    set_user_profile_active(callback.from_user.id, False)
-    await state.clear()
-    await state.update_data(lang=lang)
-    await state.set_state(SearchStates.choosing_category)
-    await callback.answer()
-    await callback.message.edit_text(t("logout_confirmed", lang), reply_markup=login_keyboard(lang))
-
-
-@router.callback_query(F.data == "profile_login")
-async def profile_login_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    lang = (await state.get_data()).get("lang") or get_user_language(callback.from_user.id) or "ru"
-    profile = get_user_profile(callback.from_user.id)
-    await callback.answer()
-    if profile is None:
-        await callback.message.edit_text(t("need_profile_first", lang), reply_markup=login_keyboard(lang))
-        return
-    set_user_profile_active(callback.from_user.id, True)
-    updated = get_user_profile(callback.from_user.id) or profile
-    await callback.message.edit_text(
-        f"{t('login_success', lang)}\n\n{display_profile(updated)}",
-        reply_markup=profile_menu_keyboard(lang=lang),
-    )
-
-
-@router.callback_query(F.data == "profile_menu")
-async def profile_menu_handler(callback: CallbackQuery) -> None:
-    profile = load_profile(callback.from_user.id)
-    lang = get_user_language(callback.from_user.id) or "ru"
-    await callback.answer()
-    if profile is None or not profile_complete(profile):
-        existing = get_user_profile(callback.from_user.id)
-        has_real_profile = bool(existing) and any(existing.get(key) for key in ("field", "specialization", "skills", "preferred_roles", "experience_level"))
-        if has_real_profile:
-            await callback.message.edit_text(t("login_required", lang), reply_markup=login_keyboard(lang))
-        else:
-            await callback.message.edit_text(t("no_active_profile", lang), reply_markup=profile_create_keyboard(lang))
-        return
-    await callback.message.edit_text(display_profile(profile), reply_markup=profile_menu_keyboard(lang=lang))
-
-
-@router.callback_query(F.data.in_({"profile_create", "profile_edit"}))
-async def profile_start_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.answer()
-    if callback.data == "profile_edit":
-        profile = load_profile(callback.from_user.id)
-        if profile is None:
-            await callback.answer("Сначала создайте профиль.", show_alert=True)
-            return
-        await begin_profile_onboarding(callback, state, edit_mode=True)
-        return
-    await begin_profile_onboarding(callback, state)
-
-
-@router.callback_query(SearchStates.profile_field, F.data.startswith("profile:field:"))
-async def profile_field_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    field = callback.data.rsplit(":", 1)[1]
-    lang = (await state.get_data()).get("lang", "ru")
-    await state.update_data(field=field, specialization=None, skills=[])
-    await callback.answer()
-    await state.set_state(SearchStates.profile_specialization)
-    await callback.message.edit_text(
-        t("profile_specialization_prompt", lang, label=PROFILE_FIELDS.get(field, PROFILE_FIELDS["other"])["label"]),
-        reply_markup=profile_specialization_keyboard(field, None),
-    )
-
-
-@router.callback_query(SearchStates.profile_specialization, F.data.startswith("profile:specialization:"))
-async def profile_specialization_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    specialization = callback.data.rsplit(":", 1)[1]
-    data = await state.get_data()
-    await state.update_data(specialization=specialization)
-    field = data.get("field") or "other"
-    skills = PROFILE_FIELDS.get(field, PROFILE_FIELDS["other"])["skills"].get(specialization, [])
-    await state.set_state(SearchStates.profile_skills)
-    await callback.answer()
-    await callback.message.edit_text(
-        t("profile_skills_prompt", data.get("lang", "ru")),
-        reply_markup=profile_skill_keyboard(field, specialization, data.get("skills", [])),
-    )
-
-
-@router.callback_query(SearchStates.profile_skills, F.data.startswith("profile:skill:"))
-async def profile_skills_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    key = callback.data.rsplit(":", 1)[1]
-    data = await state.get_data()
-    field = data.get("field") or "other"
-    specialization = data.get("specialization") or "other"
-    selected = list(data.get("skills", []))
-    if key == "done":
-        if not selected:
-            await callback.answer(t("profile_skills_required", data.get("lang", "ru")), show_alert=True)
-            return
-        await state.set_state(SearchStates.profile_level)
-        await callback.answer()
-        await callback.message.edit_text(t("profile_level_prompt", data.get("lang", "ru")), reply_markup=profile_level_choice_keyboard())
-        return
-    if key in selected:
-        selected.remove(key)
-    else:
-        selected.append(key)
-    await state.update_data(skills=selected)
-    await callback.answer()
-    await callback.message.edit_reply_markup(reply_markup=profile_skill_keyboard(field, specialization, selected))
-
-
-@router.callback_query(SearchStates.profile_level, F.data.startswith("profile:level:"))
-async def profile_level_choice_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    level = callback.data.rsplit(":", 1)[1]
-    lang = (await state.get_data()).get("lang", "ru")
-    await state.update_data(level=level)
-    await state.set_state(SearchStates.profile_work_format)
-    await callback.answer()
-    await callback.message.edit_text(t("profile_work_format_prompt", lang), reply_markup=profile_work_format_keyboard())
-
-
-@router.callback_query(SearchStates.profile_work_format, F.data.startswith("profile:work_format:"))
-async def profile_work_format_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    work_format = callback.data.rsplit(":", 1)[1]
-    lang = (await state.get_data()).get("lang", "ru")
-    await state.update_data(work_format=work_format)
-    await state.set_state(SearchStates.profile_experience)
-    await callback.answer()
-    await callback.message.edit_text(t("profile_experience_prompt", lang), reply_markup=profile_experience_keyboard())
-
-
-@router.callback_query(SearchStates.profile_experience, F.data.startswith("profile:experience:"))
-async def profile_experience_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    experience = callback.data.rsplit(":", 1)[1]
-    lang = (await state.get_data()).get("lang", "ru")
-    await state.update_data(experience=experience)
-    await state.set_state(SearchStates.profile_hours)
-    await callback.answer()
-    await callback.message.edit_text(t("profile_hours_prompt", lang), reply_markup=profile_hours_keyboard())
-
-
-@router.callback_query(SearchStates.profile_hours, F.data.startswith("profile:hours:"))
-async def profile_hours_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    hours = callback.data.rsplit(":", 1)[1]
-    await state.update_data(hours=hours)
-    await callback.answer()
-    await finish_profile_field(callback, state)
 
 
 @router.callback_query(F.data.startswith("analyze:"))

@@ -48,7 +48,9 @@ def get_user_profile(user_id: int) -> dict[str, Any] | None:
                     """
                           SELECT user_id, language, experience_level, preferred_roles, work_formats,
                               locations, experience, languages, field, specialization, skills, level,
-                              work_format, hours, city, is_active, created_at, updated_at
+                              work_format, hours, city, is_active, created_at, updated_at,
+                              full_name, age, education_level, employment_status, desired_position,
+                              preferred_language, expected_salary, profile_data
                     FROM user_profiles WHERE user_id = %s
                     """,
                     (user_id,),
@@ -56,14 +58,21 @@ def get_user_profile(user_id: int) -> dict[str, Any] | None:
                 row = cur.fetchone()
                 if row is None:
                     return None
-                return {
+                legacy = {
                     "user_id": row[0], "language": row[1], "experience_level": row[2],
                     "preferred_roles": row[3], "work_formats": row[4], "locations": row[5],
                     "experience": row[6], "languages": row[7], "field": row[8],
                     "specialization": row[9], "skills": row[10], "level": row[11],
                     "work_format": row[12], "hours": row[13], "city": row[14],
                     "is_active": row[15], "created_at": row[16], "updated_at": row[17],
+                    "full_name": row[18], "age": row[19], "education_level": row[20],
+                    "employment_status": row[21], "desired_position": row[22],
+                    "preferred_language": row[23], "expected_salary": row[24],
                 }
+                payload = row[25] if row[25] else {}
+                if isinstance(payload, dict):
+                    legacy.update(payload)
+                return legacy
     except Exception:
         return None
 
@@ -71,6 +80,23 @@ def get_user_profile(user_id: int) -> dict[str, Any] | None:
 def upsert_user_profile(user_id: int, profile: dict[str, Any]) -> dict[str, Any] | None:
     if not is_database_configured():
         return None
+    profile = dict(profile)
+    profile_data = {
+        key: value for key, value in profile.items()
+        if key in {
+            "full_name",
+            "age",
+            "city",
+            "education_level",
+            "employment_status",
+            "desired_position",
+            "experience_level",
+            "skills",
+            "preferred_language",
+            "expected_salary",
+            "language",
+        }
+    }
     try:
         with _connect() as conn:
             with conn.cursor() as cur:
@@ -79,8 +105,11 @@ def upsert_user_profile(user_id: int, profile: dict[str, Any]) -> dict[str, Any]
                     INSERT INTO user_profiles (
                         user_id, language, experience_level, preferred_roles, work_formats,
                         locations, experience, languages, field, specialization, skills, level,
-                        work_format, hours, city, is_active, created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                        work_format, hours, city, is_active, full_name, age, education_level,
+                        employment_status, desired_position, preferred_language, expected_salary,
+                        profile_data, created_at, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                              %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                     ON CONFLICT (user_id) DO UPDATE SET
                         language = EXCLUDED.language,
                         experience_level = EXCLUDED.experience_level,
@@ -97,6 +126,14 @@ def upsert_user_profile(user_id: int, profile: dict[str, Any]) -> dict[str, Any]
                         hours = EXCLUDED.hours,
                         city = EXCLUDED.city,
                         is_active = EXCLUDED.is_active,
+                        full_name = EXCLUDED.full_name,
+                        age = EXCLUDED.age,
+                        education_level = EXCLUDED.education_level,
+                        employment_status = EXCLUDED.employment_status,
+                        desired_position = EXCLUDED.desired_position,
+                        preferred_language = EXCLUDED.preferred_language,
+                        expected_salary = EXCLUDED.expected_salary,
+                        profile_data = EXCLUDED.profile_data,
                         updated_at = NOW()
                     """,
                     (
@@ -116,6 +153,14 @@ def upsert_user_profile(user_id: int, profile: dict[str, Any]) -> dict[str, Any]
                         profile.get("hours"),
                         profile.get("city"),
                         profile.get("is_active", True),
+                        profile.get("full_name"),
+                        profile.get("age"),
+                        profile.get("education_level"),
+                        profile.get("employment_status"),
+                        profile.get("desired_position"),
+                        profile.get("preferred_language"),
+                        profile.get("expected_salary"),
+                        Jsonb(profile_data),
                     ),
                 )
     except Exception:
