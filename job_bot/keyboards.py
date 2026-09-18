@@ -121,12 +121,12 @@ def profile_menu_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
 
 def profile_edit_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 Уровень", callback_data="profile_field:level")],
-        [InlineKeyboardButton(text="🎯 Направления", callback_data="profile_field:roles")],
-        [InlineKeyboardButton(text="🏠 Формат", callback_data="profile_field:work")],
-        [InlineKeyboardButton(text="📍 Локация", callback_data="profile_field:location")],
-        [InlineKeyboardButton(text="💼 Опыт", callback_data="profile_field:experience")],
-        [InlineKeyboardButton(text="🌍 Языки", callback_data="profile_field:languages")],
+        [InlineKeyboardButton(text="📊 Уровень", callback_data="profile:field:level")],
+        [InlineKeyboardButton(text="🎯 Направления", callback_data="profile:field:roles")],
+        [InlineKeyboardButton(text="🏠 Формат", callback_data="profile:field:work")],
+        [InlineKeyboardButton(text="📍 Локация", callback_data="profile:field:location")],
+        [InlineKeyboardButton(text="💼 Опыт", callback_data="profile:field:experience")],
+        [InlineKeyboardButton(text="🌍 Языки", callback_data="profile:field:languages")],
         [InlineKeyboardButton(text="👤 Мой профиль", callback_data="profile_menu")],
     ])
 

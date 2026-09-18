@@ -50,7 +50,13 @@ from keyboards import (
     stats_keyboard,
     stats_materials_keyboard,
 )
+from handlers.analysis import router as analysis_router
+from handlers.learning import router as learning_router
+from handlers.profile import router as profile_router
 from handlers.registration import router as registration_router
+from handlers.start import router as start_router
+from handlers.stats import router as stats_router
+from handlers.vacancies import router as vacancies_router
 from learning import learning_skills, material_for, materials_for
 from parser import Vacancy, fetch_all_vacancies, fetch_channel_posts
 from profile import PROFILE_FIELDS, display_profile, load_profile, profile_complete, save_profile
@@ -60,7 +66,15 @@ from vacancy_filter import filter_posts_by_keywords, filter_vacancies
 
 
 router = Router()
-router.include_router(registration_router)
+router.include_routers(
+    analysis_router,
+    learning_router,
+    profile_router,
+    registration_router,
+    start_router,
+    stats_router,
+    vacancies_router,
+)
 
 CHANNEL_USERNAME_RE = re.compile(r"^(?:@|https://t\.me/)([A-Za-z0-9_]{5,32})/?$", re.IGNORECASE)
 RESULTS_PAGE_SIZE = 15

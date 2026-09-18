@@ -13,12 +13,20 @@ for _path in (PROJECT_ROOT, JOB_BOT_DIR):
 os.environ.setdefault("BOT_TOKEN", "test-token")
 os.environ.setdefault("DATABASE_URL", "")
 
-from job_bot import profile  # noqa: E402
+from job_bot import keyboards, profile  # noqa: E402
 from job_bot.stats import build_market_stats_message, summarize_market  # noqa: E402
 
 
 def days_ago(days: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+class CallbackPayloadContractTest(unittest.TestCase):
+    def test_profile_edit_keyboard_uses_consistent_callback_prefix(self):
+        keyboard = keyboards.profile_edit_keyboard()
+        payloads = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+        self.assertIn("profile:field:level", payloads)
+        self.assertNotIn("profile_field:level", payloads)
 
 
 class ProfileModelCompatibilityTest(unittest.TestCase):
